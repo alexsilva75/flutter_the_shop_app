@@ -4,6 +4,7 @@ import 'package:provider/provider.dart';
 import './screens/products_overview_screen.dart';
 import './screens/product_detail_screen.dart';
 import './providers/products_provider.dart';
+import './providers/auth.dart';
 import './providers/cart.dart';
 import './providers/orders.dart';
 import './screens/cart_screen.dart';
@@ -11,6 +12,7 @@ import './screens/orders_screen.dart';
 import './screens/user_products_screen.dart';
 import './screens/edit_product_screen.dart';
 import './screens/auth_screen.dart';
+import './screens/splash_screen.dart';
 
 void main() {
   runApp(MyApp());
@@ -23,6 +25,9 @@ class MyApp extends StatelessWidget {
     return MultiProvider(
       providers: [
         ChangeNotifierProvider(
+          create: (ctx) => Auth(),
+        ),
+        ChangeNotifierProxyProvider<Auth, ProductsProvider>(
           /** If you are creating a brand new Object, like this below,
            * the recommended practice is to use 'create:' rather than 
            * the 'value:' approach. Here 'value:' was used only to show
@@ -30,30 +35,62 @@ class MyApp extends StatelessWidget {
            * when you are recycling an already existing value or object, like,
            * in list iterations.
           */
-          create: (ctx) => ProductsProvider(),
+          create: (ctx) => ProductsProvider(null, null, []),
+          update: (
+            ctx,
+            auth,
+            previousProductsProvider,
+          ) =>
+              ProductsProvider(
+            auth.token,
+            auth.userId,
+            previousProductsProvider == null
+                ? []
+                : previousProductsProvider.items,
+          ),
         ),
         ChangeNotifierProvider.value(
           value: Cart(),
         ),
-        ChangeNotifierProvider(
-          create: (ctx) => Orders(),
-        ),
+        ChangeNotifierProxyProvider<Auth, Orders>(
+            create: (ctx) => Orders(null, null, []),
+            update: (ctx, auth, previousOrders) {
+              return Orders(
+                auth.token,
+                auth.userId,
+                previousOrders == null ? [] : previousOrders.orders,
+              );
+            }),
       ],
-      child: MaterialApp(
-        title: 'The Shop App',
-        theme: ThemeData(
-          primarySwatch: Colors.purple,
-          accentColor: Colors.deepOrange,
-          fontFamily: 'Lato',
+      child: Consumer<Auth>(
+        builder: (ctx, auth, child) => MaterialApp(
+          title: 'MyShop',
+          theme: ThemeData(
+            primarySwatch: Colors.purple,
+            accentColor: Colors.deepOrange,
+            fontFamily: 'Lato',
+          ),
+          home: auth.isAuth
+              ? ProductsOverviewScreen()
+              : FutureBuilder(
+                  future: auth.tryAutoLogin(),
+                  builder: (
+                    ctx,
+                    authResultSnapshot,
+                  ) =>
+                      authResultSnapshot.connectionState ==
+                              ConnectionState.waiting
+                          ? SplashScreen()
+                          : AuthScreen(),
+                ),
+          routes: {
+            ProductDetailScreen.routeName: (ctx) => ProductDetailScreen(),
+            CartScreen.routeName: (ctx) => CartScreen(),
+            OrdersScreen.routeName: (ctx) => OrdersScreen(),
+            UserProductsScreen.routeName: (ctx) => UserProductsScreen(),
+            EditProductScreen.routeName: (ctx) => EditProductScreen(),
+          },
         ),
-        home: AuthScreen(),
-        routes: {
-          ProductDetailScreen.routeName: (ctx) => ProductDetailScreen(),
-          CartScreen.routeName: (ctx) => CartScreen(),
-          OrdersScreen.routeName: (ctx) => OrdersScreen(),
-          UserProductsScreen.routeName: (ctx) => UserProductsScreen(),
-          EditProductScreen.routeName: (ctx) => EditProductScreen(),
-        },
       ),
     );
   }
